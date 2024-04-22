@@ -229,9 +229,9 @@ for i in range(8):
     predictions_test, prob_predictions_test, labels_test = Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_mode = 'predict', proto_select = 'fixed', basis_type = 'gaussian')
   #  prob_predictions.append(prob_predictions_out_of_sample)
     prob_predictions_test_stacked = np.vstack((prob_predictions_test_stacked, prob_predictions_test))
-    labels_array = labels_test.array
-    labels_array = labels_array.to_numpy()
-    labels_stacked = np.vstack((labels_stacked, labels_array.reshape(-1,+1)))
+    #labels_array = labels_test.array
+   # labels_test = labels_test.to_numpy()
+    labels_stacked = np.vstack((labels_stacked, labels_test.reshape(-1,+1)))# labels_array.reshape(-1,+1)))
 
     for t in range(len(prob_predictions_test)):
         if prob_predictions_test[t,0]>global_threshold[i]: # compute the prediction TPR and TNR for the selected threshold during training
@@ -241,17 +241,17 @@ for i in range(8):
     predictions_test_stacked = np.vstack((predictions_test_stacked, predictions_test.reshape(-1,+1)))
     
     # Initialize variables
-    TP_test = np.sum((labels_array == 1) & (predictions_test == 1))
-    P_test = np.sum(labels_array == 1)
-    TN_test = np.sum((labels_array == 0) & (predictions_test == 0))
-    N_test = np.sum(labels_array == 0)
+    TP_test = np.sum((labels_test == 1) & (predictions_test == 1))
+    P_test = np.sum(labels_test == 1)
+    TN_test = np.sum((labels_test == 0) & (predictions_test == 0))
+    N_test = np.sum(labels_test == 0)
     
     if P_test>0:        
         TPR_test.append(TP_test/P_test)
     else:
         TPR_test.append(None)
     TNR_test.append(TN_test/N_test)
-    if len(np.unique(labels_array)) > 1:
+    if len(np.unique(labels_test)) > 1:
         auc_per_patient_test = roc_auc_score(labels_test, prob_predictions_test[:, 1])
     else:
         auc_per_patient_out_of_sample = 0
