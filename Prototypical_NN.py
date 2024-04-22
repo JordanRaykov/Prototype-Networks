@@ -39,9 +39,9 @@ from utils import compute_phi
 import random
 import numpy.matlib
 
-from utis import mapdp_nw
+from utils import mapdp_nw
     
-def Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_mode, proto_select, hypers, basis_type):
+def Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_mode, proto_select, basis_type, hypers = None):
 
     if proto_select == 'fixed':
         if basis_type == 'gaussian':
@@ -74,12 +74,20 @@ def Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_
     score_cat = np.zeros([T, 2])
     for c in range(2):
         y_c = (y_train == c)
-        W[:,c] = np.matmul(np.linalg.pinv(np.matmul(phi.T,phi)), np.matmul(phi.T,y_c))
+        print('np.shape(np.matmul(np.linalg.pinv(np.matmul(phi.T,phi)), np.matmul(phi.T, y_c)))')
+        print(np.shape(np.matmul(np.linalg.pinv(np.matmul(phi.T,phi)), np.matmul(phi.T, y_c))))
+        W[:,c] = np.matmul(np.linalg.pinv(np.matmul(phi.T,phi)), np.matmul(phi.T, y_c))
         
     if train_mode == 'train':
         return W, phi, C, Beta
         
     if train_mode == 'test' or train_mode == 'predict':
+        print('shape of X_test')
+        print(np.shape(X_test))
+        print('shape of C')
+        print(np.shape(C))
+        print('shape of Beta')
+        print(np.shape(Beta))
         phi_test = compute_phi(X_test.T, C, Beta)
         phi_test[np.isnan(phi_test)] = 0
         
@@ -105,19 +113,17 @@ def Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_
         prob_predictions = score_cat
         predictions = Y_hat_test  
         if train_mode == 'test':
-            labels = y_test
-            ACC = np.sum(predictions == labels)/len(labels)
-            TPR = np.sum(predictions == 1 and labels == 1)/len(labels)
-            TNR = np.sum(predictions == 0 and labels == 0)/len(labels)
+            ACC = np.sum(predictions == y_test)/len(y_test)
+            TPR = np.sum(predictions == 1 and y_test == 1)/len(y_test)
+            TNR = np.sum(predictions == 0 and y_test == 0)/len(y_test)
             print('Accuracy:')
             print(ACC)
             print('Sensitivity:')
             print(TPR)
             print('Specificity:')
             print(TNR)
-        return predictions, prob_predictions, labels
+        return predictions, prob_predictions, y_test
 
  
-    
-    
+
     

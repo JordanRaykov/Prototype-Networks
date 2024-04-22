@@ -16,7 +16,27 @@ from numpy.linalg import slogdet
 from numpy.matlib import repmat
 from numpy.linalg import inv
 
+import random
 
+def tpsrbf(x, mu, beta, ax = None):
+    #Add epsilon to avoid zero value for log
+    dist = np.divide((x - mu)**2, beta)
+    dist = np.sum(dist, axis=0)
+    r = dist    
+    out = np.exp(-r)
+    if r.any()==0:#r == 0):
+        out[np.where(r==0)] = 1
+    return out
+
+def compute_phi(X, C, Beta):    
+    T = X.shape[1]
+    h = C.shape[0]      
+    r = C.shape[1]
+    d = C.shape[1]
+    phi = np.zeros([T, h])    
+    for i in range(h):
+        phi[:,i] = tpsrbf(X, C[i,:].reshape(d,1), Beta[i,:].reshape(d,1), ax = 0)
+    return phi
 
 def mapdp_nw(X, N0, m0, a0, c0, B0, epsilon=1e-6, maxiter=100, fDebug=False):
     '''
@@ -472,6 +492,143 @@ def feature_estimate(Y_tremor, Fs, Ts = 1, featureMatrixType=1):
                                               total_max_power_z.T, total_power_z.T, se_z, f_z[ind_max_power_gait_z], f_z[ind_max_power_tremor_z], f_z[ind_max_power_high_tremor_z], f_z[ind_max_power_total_z], cepstral_coeffs_z),axis=0)
         return 
     
+    
+def compute_grad(function, X, W, C, N, class_labels, nl, l, d, Beta = None):
+    
+    T = X[nl].shape[0]
+    grad = X[nl] - class_labels
+    for k in np.arange(nl-1,l-1,-1):
+        if function == 'zlogz':
+            z = cdist(X[k], C[k], 'euclidean')
+            G = -np.multiply(np.dot(grad, W[k].T), np.log(z) + 1)
+            grad = np.zeros([T, d[k-1]])
+            for ind1 in range(T):
+                grad[ind1,:] = np.dot(G[ind1,:].reshape(1,-1), (np.dot(np.ones([N[k],1]), X[k][ind1,:].reshape(1,-1)) - C[k]))
+        elif function == 'gaussian':
+            G = -np.multiply(np.dot(grad, W[k].T), compute_phi('gaussian',X[k], C[k], Beta[k]))#tpsrbf(X[k], C[k], Beta[k]))
+            grad = np.zeros([T, d[k-1]])
+            for ind1 in range(T):
+                grad[ind1,:] = np.dot(G[ind1,:].reshape(1,-1), (np.dot(np.ones([N[k],1]), X[k][ind1,:].reshape(1,-1)) - C[k]))
+    grad[np.isinf(grad)] = 0
+    return grad
+
+from sklearn import preprocessing
+
+def CrossEntropyLoss(yHat, y):
+    T = y.shape[0]
+    K = y.shape[1]
+    E = 0
+
+    for t in range(T):
+        for k in range(K):
+            E = E - y[t,k]*math.log2(yHat[t,k])
+    return E
+    
+  
+
+def NS(X, W, phi, phi_inv, niter):
+#Inputs:
+#    X: T x D matrix of the layers input data
+#    W: dictionary of the wieghts at each layer
+#    phi: output of layer before weight multiplication
+#    niter: maximum number of training iterations
+    
+    T = X.shape[0]
+    d = W.shape[1]
+    
+    Y = np.dot(phi,W)
+    
+    Dx = sp.spatial.distance.cdist(X, X)
+    Dy = sp.spatial.distance.cdist(Y, Y)
+    
+    error = 0.5*np.linalg.norm((Dx - Dy)/(Dx + (Dx == 0)))
+    
+    eta = 1e-3
+    kup = 2.5
+    kdown = 0.1
+    success = 1
+    c = 0
+        
+    for epoch in range(niter):
+        if success == 1:
+            grad = np.zeros([T, d])
+            for i in range(T):
+                grad[i,:] = - np.dot(((Dx[i,:] - Dy[i, :])/((Dy[i, :] + (Dy[i, :] == 0))*(Dx[i, :] + (Dx[i, :] == 0)))), \
+                    (Y[i,:] - Y))
+           
+        Y_new = Y - eta*grad
+        W_new = np.dot(phi_inv, Y_new)
+        Y_new = np.dot(phi, W_new)
+        
+        Dy = sp.spatial.distance.cdist(Y_new, Y_new)           
+        error_new = 0.5*np.linalg.norm((Dx - Dy)/(Dx + (Dx == 0)))           
+    
+        if error > error_new:
+            success = 1
+            eta = eta*kup
+            error = error_new
+            W = W_new.copy()
+            Y = Y_new.copy()
+            c = 0
+        else:
+            success = 0
+            eta = eta*kdown
+            c += 1
+            
+        if c > 20:
+            break
+        
+        print('Iter: ', epoch, 'Error: ', error)
+        
+    return Y, W
+
+def compute_basis_params(data, protovar1, protovar2, estimation_method = 'data_driven'):    
+    
+    basis_params = []
+    if estimation_method == 'data_driven':
+        d = np.shape(data)[1] - 2
+        num_proto_1 = len(np.unique(data[protovar1])) - 1
+        num_proto_2 = len(np.unique(data[protovar2])) - 1
+        C = np.zeros([1, d])
+        Beta = np.zeros([1, d])
+        mu_basis = np.zeros((d,1))
+        sigma_basis = np.zeros((d,1))
+        beta = np.zeros([num_proto_1, d])
+    
+        ###Instantiate prototype based basis centers
+        for k in range(num_proto_1):
+            id_proto1 = np.where(data[protovar1] == k+1)
+            id_proto1 = np.array(id_proto1).reshape(-1) 
+            data_features = np.array(data.drop(columns=[protovar1, protovar2]))
+            data_features_proto1 = data_features[id_proto1,:]  
+            
+            mu =  np.array(random.choices(data_features_proto1, k=num_proto_1)).reshape(num_proto_1, d)
+            for dd in range(d):
+                beta[:,dd] = np.std(np.array(data_features_proto1[:,dd]))*np.ones((num_proto_1,))
+                beta[:,dd] = beta[:,dd]*0.1 # choose poriton of the variance scale parameter
+           
+            C = np.vstack((C, mu))
+            Beta = np.vstack((Beta, beta))
+    
+        beta = np.zeros([num_proto_2,d])
+        for kk in range(num_proto_2):
+            id_proto2 = np.where(data[protovar2] == kk+1)
+            id_proto2 = np.array(id_proto2).reshape(-1)
+            data_features_proto2 = data_features[id_proto2,:]  
+
+            mu = np.array(random.choices(data_features_proto2, k=num_proto_2)).reshape(num_proto_2,d)
+            for dd in range(d):
+                beta[:,dd] = np.std(np.array(data_features_proto2[:,dd]))*np.ones((num_proto_2,))
+                beta[:,dd] = beta[:,dd]*0.1
+            C = np.vstack((C, mu))
+            Beta = np.vstack((Beta, beta))
+        
+        C = C[1:,:]
+        Beta = Beta[1:,:]
+    
+        basis_params.append(C)
+        basis_params.append(Beta)
+        return basis_params
     
 def cepstral_coefficients(
     self,
