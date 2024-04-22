@@ -254,8 +254,8 @@ for i in range(8):
     if len(np.unique(labels_test)) > 1:
         auc_per_patient_test = roc_auc_score(labels_test, prob_predictions_test[:, 1])
     else:
-        auc_per_patient_out_of_sample = 0
-    AUC_test.append(auc_per_patient_out_of_sample)
+        auc_per_patient_test = 0
+    AUC_test.append(auc_per_patient_test)
     idt = str(i)
     print('...' + idt + ' processing complete.')     
     
