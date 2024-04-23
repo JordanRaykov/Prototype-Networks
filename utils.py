@@ -582,7 +582,7 @@ def NS(X, W, phi, phi_inv, niter):
         
     return Y, W
 
-def compute_basis_params(data, protovar1, protovar2, estimation_method = 'data_driven'):    
+def compute_basis_params(data, protovar1, protovar2, num_basis, estimation_method = 'data_driven'):    
     
     basis_params = []
     if estimation_method == 'data_driven':
@@ -591,9 +591,8 @@ def compute_basis_params(data, protovar1, protovar2, estimation_method = 'data_d
         num_proto_2 = len(np.unique(data[protovar2])) - 1
         C = np.zeros([1, d])
         Beta = np.zeros([1, d])
-        mu_basis = np.zeros((d,1))
-        sigma_basis = np.zeros((d,1))
-        beta = np.zeros([num_proto_1, d])
+
+        beta = np.zeros([num_basis, d])
     
         ###Instantiate prototype based basis centers
         for k in range(num_proto_1):
@@ -602,23 +601,30 @@ def compute_basis_params(data, protovar1, protovar2, estimation_method = 'data_d
             data_features = np.array(data.drop(columns=[protovar1, protovar2]))
             data_features_proto1 = data_features[id_proto1,:]  
             
-            mu =  np.array(random.choices(data_features_proto1, k=num_proto_1)).reshape(num_proto_1, d)
+            mu =  np.array(random.choices(data_features_proto1, k=num_basis)).reshape(num_basis, d)
             for dd in range(d):
-                beta[:,dd] = np.std(np.array(data_features_proto1[:,dd]))*np.ones((num_proto_1,))
+                print('std basis')
+                print(np.std(np.array(data_features_proto1[:,dd])))
+                print(np.ones((num_basis,)))
+                
+                beta[:,dd] = np.std(np.array(data_features_proto1[:,dd]))*np.ones((num_basis,))
                 beta[:,dd] = beta[:,dd]*0.1 # choose poriton of the variance scale parameter
            
             C = np.vstack((C, mu))
             Beta = np.vstack((Beta, beta))
     
-        beta = np.zeros([num_proto_2,d])
+        beta = np.zeros([num_basis,d])
         for kk in range(num_proto_2):
             id_proto2 = np.where(data[protovar2] == kk+1)
             id_proto2 = np.array(id_proto2).reshape(-1)
             data_features_proto2 = data_features[id_proto2,:]  
 
-            mu = np.array(random.choices(data_features_proto2, k=num_proto_2)).reshape(num_proto_2,d)
+            mu = np.array(random.choices(data_features_proto2, k=num_basis)).reshape(num_basis, d)
             for dd in range(d):
-                beta[:,dd] = np.std(np.array(data_features_proto2[:,dd]))*np.ones((num_proto_2,))
+                print('std basis')
+                print(np.std(np.array(data_features_proto2[:,dd])))
+                print(np.ones((num_basis,)))
+                beta[:,dd] = np.std(np.array(data_features_proto2[:,dd]))*np.ones((num_basis,))
                 beta[:,dd] = beta[:,dd]*0.1
             C = np.vstack((C, mu))
             Beta = np.vstack((Beta, beta))

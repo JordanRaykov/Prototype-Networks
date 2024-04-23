@@ -165,7 +165,7 @@ predictions_test_stacked = np.zeros([1,1])
 labels_stacked = np.zeros([1,1])
 auc_per_patient_test_stacked = np.zeros([1,1])
 
-for i in range(8):
+for i in range(49):
     data_filtered = data_features[data_features[idcolumn] != i+1] # Remove current subject ID and use for evaluation 
     data_cv = data_features[data_features[idcolumn] == i+1] # Isolate the current subject ID
    
@@ -174,14 +174,11 @@ for i in range(8):
     # Take the arrays from the data frame
     y_train = np.array(data_train['Non-tremor/Tremor']) # Outcome variable here
     X_train = data_train.drop(columns=['Non-tremor/Tremor']) # Remove the outcome from the feature matrix 
-    #Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_mode, proto_select, hypers, basis_type):
         
-    basis_params = compute_basis_params(data_filtered, protovar, nontremorprotovar)
-    predictions_training, prob_predictions_training, labels_training =  Layer_prototypical_NN(X_train, y_train, basis_params, X_train, y_train, train_mode = 'predict', proto_select = 'fixed', basis_type = 'gaussian')
+    basis_params = compute_basis_params(data_filtered, protovar, nontremorprotovar, num_basis = 100)
+    predictions_training, prob_predictions_training, labels_training =  Layer_prototypical_NN(X_train, y_train, basis_params, X_train, y_train, train_mode = 'predict', proto_select = 'fixed', basis_type = 'gaussian', num_proto_cat = 14, num_basis = 100, training_mode = 'GP-mode')
     predictions_training = predictions_training.reshape(+1,-1)[0]
-  #  C, Beta, rbf_model, train_prediction, model = RBF_network_proto_and_nontremor_train(data_train, outcomevar, protovar, non_tremor_classes_var, h, d)
-  #  predictions_training, prob_predictions_training, labels_training = RBF_network_proto_and_nontremor_predict(data_train, outcomevar, protovar, non_tremor_classes_var, h, rbf_model, model, C, Beta)
-    
+
     thresholds = np.linspace(0.0,1.0,250) # Discretize the AUC and compute thresholds for the classifier
                                           # In Evers et al. 2024, we have used thresholds 
                                           # ensuring specificity of 95%.  
@@ -193,13 +190,6 @@ for i in range(8):
                 predictions_training[t] = 1
         
         # Initialize variables
-        print('np.shape(y_train)')
-        print(np.shape(y_train))
-        print('np.shape(predictions_training)')
-        print(np.shape(predictions_training))
-        #y_train = y_train.reshape(-1,+1)
-        print('np.shape(y_train)')
-        print(np.shape(y_train))
         TP_training = np.sum((y_train == 1) & (predictions_training == 1))
         P_training = np.sum(y_train == 1)
         TN_training = np.sum((y_train == 0) & (predictions_training == 0))
@@ -218,8 +208,7 @@ for i in range(8):
             print(global_threshold)
             break
     # Use estimated thresholds to make out-of-sample predictions with the fully trained classifier
-  #  predictions_test, prob_predictions_test, labels_test = RBF_networkLOOCV_proto_and_nontremor
-    #Layer_prototypical_NN(X_train, y_train, X_train, y_train, basis_params, train_mode = 'predict', proto_select = 'fixed', basis_type = 'gaussian')
+
     # Train data - all other people in dataframe
     data_test = data_cv.drop(columns=idcolumn)
     # Take the arrays from the data frame
@@ -227,10 +216,7 @@ for i in range(8):
     X_test = data_test.drop(columns=['Non-tremor/Tremor']) # Remove the outcome from the feature matrix 
     basis_params = compute_basis_params(data_filtered, protovar, nontremorprotovar)    
     predictions_test, prob_predictions_test, labels_test = Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_mode = 'predict', proto_select = 'fixed', basis_type = 'gaussian')
-  #  prob_predictions.append(prob_predictions_out_of_sample)
     prob_predictions_test_stacked = np.vstack((prob_predictions_test_stacked, prob_predictions_test))
-    #labels_array = labels_test.array
-   # labels_test = labels_test.to_numpy()
     labels_stacked = np.vstack((labels_stacked, labels_test.reshape(-1,+1)))# labels_array.reshape(-1,+1)))
 
     for t in range(len(prob_predictions_test)):
@@ -259,33 +245,119 @@ for i in range(8):
     idt = str(i)
     print('...' + idt + ' processing complete.')     
     
+    
+    
 # Illustrative plots of performance 
 # TPR and TNR in-sample and out-of-sample    
     
-    
-    
-    
-    
-    
-    
-# Example of Single-layer Prototypical NN 
-X = data.drop(columns=[outcomevar, protovar, non_tremor_classes_var])
-y = data[outcomevar] #This is the outcome variable
-X_train = np.array(X)
-y_train = np.array(y) #Outcome variable here
-activity_classes = np.unique(data[non_tremor_classes_var])   
+## Example 4: Load data_features and test Single-Layer Prototypical neural network 
+#  with a few different configurations, using leave-one-subject-out cross validation.    
+from Prototypical_NN import Layer_prototypical_NN
+from utils import compute_basis_params
+from sklearn.metrics import roc_auc_score
+import pickle
 
+## Implement a single layer Prototypical neural network using Gaussian process approximation, see Evers et al. 2024 for details
+    
+with open('data_features.pkl', 'rb') as f:
+    data_features = pickle.load(f)
+    
+protovar = "Prototype_ID"   
+nontremorprotovar = "Non_tremor_activity_labels"
 
-d = 45
-h = 100
-import scipy.io as sio
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
+global_threshold = []
+TPR_training = []
+TNR_training = []
+TPR_test = []
+TNR_test = []
+AUC_test = []
 
+predictions_training_stacked = np.zeros([1,1])
+prob_predictions_test_stacked = np.zeros([1,2])
+predictions_test_stacked = np.zeros([1,1])
+labels_stacked = np.zeros([1,1])
+auc_per_patient_test_stacked = np.zeros([1,1])
 
-predictions = []
-prob_predictions = []
-labels = []
-sensitivity = []
-specificity = []
+for i in range(49):
+    data_filtered = data_features[data_features[idcolumn] != i+1] # Remove current subject ID and use for evaluation 
+    data_cv = data_features[data_features[idcolumn] == i+1] # Isolate the current subject ID
+   
+    # Train data - all other people in dataframe
+    data_train = data_filtered.drop(columns=idcolumn)
+    # Take the arrays from the data frame
+    y_train = np.array(data_train['Non-tremor/Tremor']) # Outcome variable here
+    X_train = data_train.drop(columns=['Non-tremor/Tremor']) # Remove the outcome from the feature matrix 
+        
+    basis_params = compute_basis_params(data_filtered, protovar, nontremorprotovar, num_basis = 100)
+    predictions_training, prob_predictions_training, labels_training =  Layer_prototypical_NN(X_train, y_train, basis_params, X_train, y_train, train_mode = 'predict', proto_select = 'fixed', basis_type = 'gaussian', num_proto_cat = 14, num_basis = 100, training_method = 'GP-mode')
+    predictions_training = predictions_training.reshape(+1,-1)[0]
+
+    thresholds = np.linspace(0.0,1.0,250) # Discretize the AUC and compute thresholds for the classifier
+                                          # In Evers et al. 2024, we have used thresholds 
+                                          # ensuring specificity of 95%.  
+    for threshold in thresholds:          
+        for t in range(len(prob_predictions_training)):
+            if prob_predictions_training[t,0]>threshold:
+                predictions_training[t] = 0
+            else:
+                predictions_training[t] = 1
+        
+        # Initialize variables
+        TP_training = np.sum((y_train == 1) & (predictions_training == 1))
+        P_training = np.sum(y_train == 1)
+        TN_training = np.sum((y_train == 0) & (predictions_training == 0))
+        N_training = np.sum(y_train == 0)
+
+        # Calculate TNR and print
+        TNR = TN_training / N_training
+        print(TNR)
+
+        # Check the condition on the specificity of 95% and append
+        if 0.945 < TNR < 0.955:
+            global_threshold.append(threshold)
+            TPR_training.append(TP_training / P_training)
+            TNR_training.append(TNR)
+            predictions_training_stacked = np.vstack((predictions_training_stacked, predictions_training.reshape(-1,+1)))
+            print(global_threshold)
+            break
+    # Use estimated thresholds to make out-of-sample predictions with the fully trained classifier
+
+    # Train data - all other people in dataframe
+    data_test = data_cv.drop(columns=idcolumn)
+    # Take the arrays from the data frame
+    y_test = np.array(data_test['Non-tremor/Tremor']) # Outcome variable here
+    X_test = data_test.drop(columns=['Non-tremor/Tremor']) # Remove the outcome from the feature matrix 
+    basis_params = compute_basis_params(data_filtered, protovar, nontremorprotovar)    
+    predictions_test, prob_predictions_test, labels_test = Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_mode = 'predict', proto_select = 'fixed', basis_type = 'gaussian', num_proto_cat = 14, num_basis = 100, training_method = 'GP-mode')
+    prob_predictions_test_stacked = np.vstack((prob_predictions_test_stacked, prob_predictions_test))
+    labels_stacked = np.vstack((labels_stacked, labels_test.reshape(-1,+1)))# labels_array.reshape(-1,+1)))
+
+    for t in range(len(prob_predictions_test)):
+        if prob_predictions_test[t,0]>global_threshold[i]: # compute the prediction TPR and TNR for the selected threshold during training
+            predictions_test[t] = 0
+        else:
+            predictions_test[t] = 1            
+    predictions_test_stacked = np.vstack((predictions_test_stacked, predictions_test.reshape(-1,+1)))
+    
+    # Initialize variables
+    TP_test = np.sum((labels_test == 1) & (predictions_test == 1))
+    P_test = np.sum(labels_test == 1)
+    TN_test = np.sum((labels_test == 0) & (predictions_test == 0))
+    N_test = np.sum(labels_test == 0)
+    
+    if P_test>0:        
+        TPR_test.append(TP_test/P_test)
+    else:
+        TPR_test.append(None)
+    TNR_test.append(TN_test/N_test)
+    if len(np.unique(labels_test)) > 1:
+        auc_per_patient_test = roc_auc_score(labels_test, prob_predictions_test[:, 1])
+    else:
+        auc_per_patient_test = 0
+    AUC_test.append(auc_per_patient_test)
+    idt = str(i)
+    print('...' + idt + ' processing complete.')         
+    
+    
+    
+    
