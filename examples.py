@@ -140,11 +140,21 @@ with open('data_features.pkl', 'wb') as f:
     pickle.dump(data_features, f)
     
 ## Example 3: Load data_features and test Single-Layer Prototypical neural network 
-#  with a few different configurations, using leave-one-subject-out cross validation.    
+#  with a few different configurations, using leave-one-subject-out cross validation.   
+
+ 
 from Prototypical_NN import Layer_prototypical_NN
 from utils import compute_basis_params
 from sklearn.metrics import roc_auc_score
 import pickle
+
+outcomevar = 'Non-tremor/Tremor'
+outcomevar_id = 49
+idcolumn = 'ID'
+idcolumn_id = 1
+protovar = "Prototype_ID"
+activityvar = "Activity"
+
     
 with open('data_features.pkl', 'rb') as f:
     data_features = pickle.load(f)
@@ -252,10 +262,26 @@ for i in range(49):
     
 ## Example 4: Load data_features and test Single-Layer Prototypical neural network 
 #  with a few different configurations, using leave-one-subject-out cross validation.    
+
+import numpy as np
+import scipy.io as sio
+from scipy.signal import welch
+from utils import load_PD_at_home_data
+import h5py
+import pandas as pd 
 from Prototypical_NN import Layer_prototypical_NN
 from utils import compute_basis_params
 from sklearn.metrics import roc_auc_score
 import pickle
+
+
+outcomevar = 'Non-tremor/Tremor'
+outcomevar_id = 49
+idcolumn = 'ID'
+idcolumn_id = 1
+protovar = "Prototype_ID"
+activityvar = "Activity"
+
 
 ## Implement a single layer Prototypical neural network using Gaussian process approximation, see Evers et al. 2024 for details
     
