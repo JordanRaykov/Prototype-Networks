@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-This is function with the necessary routines to train, evaluate and do predictions 
-out of sample using single-layer prototypical network. 
+This is module with the necessary functions to train, evaluate and do predictions 
+out of sample using prototypical neural networks (NN). Key functions include Layer_prototypical_NN and 
+MultiLayer_prototypical_NN: Layer_prototypical_NN implements single layer prototypical NN using different 
+modes; MultiLayer_prototypical_NN implements a non-standard module for extendeding multiple layers 
+of prototypical NNs, based on intermediate dimensionality reduction. 
 
 Arguments: train_mode = {train, test, predict}
            proto_select = {fixed; data_driven}
@@ -128,17 +131,102 @@ def Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_
                 print('Specificity: ', TNR)
                 return predictions, prob_predictions, y_test
     elif training_method == 'GP-mode':
-        
+        import tqdm
+        import math
+        import torch
+        import gpytorch
+        from matplotlib import pyplot as plt
+        from torch.utils.data import TensorDataset, DataLoader
+        import urllib.request
+        import os
+        from scipy.io import loadmat
+        from math import floor
+        from gpytorch.models import ApproximateGP
+        from gpytorch.variational import CholeskyVariationalDistribution
+        from gpytorch.variational import VariationalStrategy
+
+
         d = np.shape(X_train)[1]
         y_trainn = np.tile(np.arange(1, num_proto_cat + 1), num_basis)
         y_trainn = np_utils.to_categorical(y_trainn, num_proto_cat*num_basis)
         
         kernel = PairwiseKernel(metric='rbf') 
         rbf_model = GaussianProcessRegressor(kernel=kernel).fit(C, y_trainn)
+
+        C_tensor = torch.tensor(C)
+        y_trainn = torch.tensor(y_trainn)
         
+        train_n = int(floor(0.8 * len(C_tensor)))
+        
+        train_x = C_tensor[:train_n, :].contiguous()
+        train_y = y_trainn[:train_n].contiguous()
+        
+        if torch.cuda.is_available():
+            train_x, train_y = train_x.cuda(), train_y.cuda()
+        
+        
+        train_dataset = TensorDataset(train_x, train_y)
+        train_loader = DataLoader(train_dataset, batch_size=1024, shuffle=True)
+        class GPModel(ApproximateGP):
+            def __init__(self, inducing_points):
+                variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0))
+                variational_strategy = VariationalStrategy(self, inducing_points, variational_distribution, learn_inducing_locations=True)
+                super(GPModel, self).__init__(variational_strategy)
+                self.mean_module = gpytorch.means.ConstantMean()
+                self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+
+            def forward(self, x):
+                mean_x = self.mean_module(x)
+                covar_x = self.covar_module(x)
+                return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)    
+            
+        inducing_points = train_x[:500, :]
+        rbf_model = GPModel(inducing_points=inducing_points)
+        likelihood = gpytorch.likelihoods.GaussianLikelihood()
+
+        if torch.cuda.is_available():
+            rbf_model = rbf_model.cuda()
+            likelihood = likelihood.cuda()
+            
+        num_epochs = 4
+        rbf_model.train()
+        likelihood.train()
+
+        optimizer = torch.optim.Adam([
+            {'params': rbf_model.parameters()},
+            {'params': likelihood.parameters()},
+        ], lr=0.01)
+
+        # Our loss object. We're using the VariationalELBO
+        mll = gpytorch.mlls.VariationalELBO(likelihood, rbf_model, num_data=train_y.size(0))
+        
+        epochs_iter = tqdm.notebook.tqdm(range(num_epochs), desc="Epoch")
+        for i in epochs_iter:
+            # Within each iteration, we will go over each minibatch of data
+            minibatch_iter = tqdm.notebook.tqdm(train_loader, desc="Minibatch", leave=False)
+            for x_batch, y_batch in minibatch_iter:
+                optimizer.zero_grad()
+                output = rbf_model(x_batch)
+                loss = -mll(output, y_batch)
+                minibatch_iter.set_postfix(loss=loss.item())
+                loss.backward()
+                optimizer.step()
+         
         #y_train is intput to the softmax layer
+        
+        test_dataset = TensorDataset(train_x, train_y)
+        test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
+        
+        rbf_model.eval()
+        likelihood.eval()
+        mean_pred = torch.tensor([0.])
+        with torch.no_grad():
+            for x_batch, y_batch in test_loader:
+                preds = rbf_model(x_batch)
+                mean_pred = torch.cat([mean_pred, preds.mean.cpu()])
+                
         y_train = np_utils.to_categorical(y_train, 2) # Tremor and non-tremor class
-        train_rbf = rbf_model.predict(X_train)
+        train_rbf = mean_pred#rbf_model.predict(X_train)
         #                      PERCEPTRONS LAYERS
         batch_size = 128
         epochs = 10
@@ -164,10 +252,25 @@ def Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_
         if train_mode == 'train':
             return train_prediction, train_prediction_probabilities, y_train
         elif train_mode == 'predict':
+            
+            test_dataset = TensorDataset(X_test)
+            test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
+            rbf_model.eval()
+            likelihood.eval()
+            mean_pred = torch.tensor([0.])
+            with torch.no_grad():
+                for x_batch in test_loader:
+                    preds = rbf_model(x_batch)
+                    mean_pred = torch.cat([mean_pred, preds.mean.cpu()])
+                    
+                    
             test_rbf = rbf_model.predict(X_test)
             test_prediction_probabilities = model.predict(test_rbf)
             test_prediction = np.argmax(test_prediction_probabilities, axis=1)
+           # test_prediction = model.predict(test_rbf)
+            
             return test_prediction, test_prediction_probabilities, y_test
+        
         elif train_mode == 'test':
             test_rbf = rbf_model.predict(X_test)
             test_prediction_probabilities = model.predict(test_rbf)
@@ -181,7 +284,7 @@ def Layer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_
             print('Specificity: ', TNR)
             return predictions, prob_predictions, y_test
 
-CRBFtrain(data, class_labels, nl, niter, eta_s, N, d, basis_shape = 'gaussian', basis_parameters = None, use_pca = True, use_gplvm = True, basis_learning = None, inducing_num = None):  
+#CRBFtrain(data, class_labels, nl, niter, eta_s, N, d, basis_shape = 'gaussian', basis_parameters = None, use_pca = True, use_gplvm = True, basis_learning = None, inducing_num = None):  
 def MultiLayer_prototypical_NN(X_train, y_train, basis_params, X_test, y_test, train_mode, proto_select, basis_type, num_proto_cat, num_basis, training_method = 'pseudo-inverse', hypers = None):
     #Inputs:
     #    data: T x D matrix of the input data
