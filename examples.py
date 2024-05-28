@@ -10,16 +10,17 @@ from scipy.signal import welch
 from utils import load_PD_at_home_data
 import h5py
 import pandas as pd 
-
-# Example 1: (Computing signal processing features in Python)
-phys_data = sio.loadmat('physilog_PD_hbv012.mat')#['phys']
-labels_data = sio.loadmat('labels_PD_phys_tremorfog_sharing_prototypes_selection.mat')['labels']
-#processed_data = load_PD_at_home_data('physilog_PD_hbv012.mat', 'labels_PD_phys_tremorfog_sharing_prototypes_selection.mat', Ts = 2, Fs = 200)
-
-    ################### UNDONE #####################
+import pickle
 
 
-## Example 2: (Use pre-computed feature matrices in MATLAB and configure tremor/activity prototype matrices)
+## Computing signal processing features in Python
+# Features can be generated from raw data using functions load_PD_at_home_data and feature estimate
+# from utils.py. We do note provide a working example since access to the raw data for PD@Home has not been
+# freely shared. However, researchers with access to the raw data or raw data from other studies, can
+# use those routines to replicate our results or estimate different feature matrix configurations
+
+
+## Example 1: (Use pre-computed feature matrices in MATLAB and configure tremor/activity prototype matrices)
 # This example loads a feature matrix for including PD@Home participants data computed over 2-second windows
 # The example then loads additional annotations and formats the prototype labels described in Evers et al. 2024
 
@@ -132,7 +133,6 @@ data_features["Non-tremor/Tremor"][data_features["Non-tremor/Tremor"] == 99] = 0
 # if you are interested in using this info.
 
 data_features = data_features.drop(columns=["Medication_Intake", "Activity_label"]) 
-import pickle
 # Store to pickle for later use, note that other examples load the data_features dataframe
 # as produced here, and stored on the repository page
   
